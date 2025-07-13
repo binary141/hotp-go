@@ -41,7 +41,7 @@ func TestHotpSevenDigits(t *testing.T) {
 		1: "4287082",
 		2: "7359152",
 		3: "6969429",
-		4: "0338314", // remove the leading zero since that is just formatting
+		4: "0338314",
 		5: "8254676",
 		6: "8287922",
 		7: "2162583",
