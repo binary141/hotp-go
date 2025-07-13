@@ -1,4 +1,4 @@
-package main
+package hotp
 
 import (
 	"crypto/hmac"
