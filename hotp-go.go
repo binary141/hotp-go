@@ -2,14 +2,22 @@ package main
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha1"
+	"encoding/base32"
 	"encoding/binary"
 	"fmt"
 	"hash"
 	"math"
 )
 
-const maxLookAheadSize = 10
+const (
+	maxLookAheadSize = 10
+)
+
+var (
+	defaultHashFunc = sha1.New
+)
 
 type Hotp struct {
 	secret          string
@@ -91,7 +99,7 @@ func CreateHotp(secret string, counter uint64, digits int) Hotp {
 		counter:         counter,
 		digits:          digits,
 		lookAheadWindow: 0,
-		hashFunc:        sha1.New,
+		hashFunc:        defaultHashFunc,
 	}
 }
 
@@ -162,4 +170,30 @@ func (hotp *Hotp) Validate(code int) (bool, error) {
 
 func (hotp Hotp) Calculate() (string, error) {
 	return CalculateCode(hotp.secret, hotp.counter, hotp.digits, hotp.hashFunc)
+}
+
+// generates a random []byte of length. Note 10-20 is generally secure for hotp
+func GenerateSecret(length int) []byte {
+	secret := make([]byte, length)
+
+	// rand.Read will never return an error
+	_, _ = rand.Read(secret)
+
+	return secret
+}
+
+// returns a string that is base32 encoded
+func EncodeSecret(secret []byte) string {
+	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(secret)
+	return encoded
+}
+
+// returns a string that is base32 decoded
+func DecodeSecret(secret string) (string, error) {
+	decoded, err := base32.StdEncoding.DecodeString(secret)
+	if err != nil {
+		return "", err
+	}
+
+	return string(decoded), nil
 }

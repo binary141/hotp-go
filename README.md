@@ -20,11 +20,17 @@ import (
 )
 
 func main() {
-	secret := "12345678901234567890"
+	encodedSecret := "UMMZWVYTALVNLF2F2E46CGLB273LSV67"
+
 	var counter uint64 = 0
 	digits := 6
 
-	otp := hotp.CreateHotp(secret, counter, digits)
+	secret, err := DecodeSecret(encodedSecret)
+	if err != nil {
+		panic(err)
+	}
+
+	otp := CreateHotp(secret, counter, digits)
 
 	code, err := otp.Calculate()
 	if err != nil {
@@ -33,7 +39,7 @@ func main() {
 
 	fmt.Println(code)
 
-	validated, err := otp.Validate(287082)
+	validated, err := otp.Validate(289757)
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +51,7 @@ func main() {
 		panic(err)
 	}
 
-	validated, err = otp.Validate(287082)
+	validated, err = otp.Validate(289757)
 	if err != nil {
 		panic(err)
 	}
