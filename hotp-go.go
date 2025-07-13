@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash"
 	"math"
+	"os"
 )
 
 const (
@@ -17,7 +18,14 @@ const (
 
 var (
 	defaultHashFunc = sha1.New
+	issuer          = ""
 )
+
+func init() {
+	envIssuer := os.Getenv("ISSUER")
+
+	issuer = envIssuer
+}
 
 type Hotp struct {
 	secret          string
@@ -172,6 +180,10 @@ func (hotp Hotp) Calculate() (string, error) {
 	return CalculateCode(hotp.secret, hotp.counter, hotp.digits, hotp.hashFunc)
 }
 
+func (hotp Hotp) GenerateOtpAuth() string {
+	return GenerateOtpAuth(EncodeSecret([]byte(hotp.secret)), hotp.counter)
+}
+
 // generates a random []byte of length. Note 10-20 is generally secure for hotp
 func GenerateSecret(length int) []byte {
 	secret := make([]byte, length)
@@ -196,4 +208,8 @@ func DecodeSecret(secret string) (string, error) {
 	}
 
 	return string(decoded), nil
+}
+
+func GenerateOtpAuth(secret string, counter uint64) string {
+	return fmt.Sprintf("otpauth://hotp/%s?secret=%s&counter=%d", issuer, secret, counter)
 }
