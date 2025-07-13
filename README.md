@@ -60,6 +60,16 @@ func main() {
 }
 ```
 
+## Envs
+
+| Key      | Value Type | Example Value     |
+|----------|------------|-------------------|
+| `ISSUER` | `string`   | `"MyApplication"` |
+
+**Description:**  
+The `ISSUER` is a string that identifies the service or provider issuing the HOTP/TOTP codes. 
+It is used in OTP provisioning URIs (e.g., `otpauth://...`) and typically displayed by authenticator apps like Google Authenticator or Authy as the account "provider" name.
+
 ## Testing
 ```sh
 go test
