@@ -209,7 +209,9 @@ func (hotp Hotp) Calculate() (string, error) {
 }
 
 func (hotp Hotp) GenerateOtpAuth() string {
-	return GenerateOtpAuth(EncodeSecret([]byte(hotp.secret)), hotp.counter, hotp.hashFunc)
+	params := hotp.GenerateOtpAuthParams()
+
+	return fmt.Sprintf("otpauth://hotp/%s", params)
 }
 
 // generates a random []byte of length. Note 10-20 is generally secure for hotp
@@ -238,6 +240,10 @@ func DecodeSecret(secret string) (string, error) {
 	return string(decoded), nil
 }
 
-func GenerateOtpAuth(secret string, counter uint64, hashFunc HashFunc) string {
-	return fmt.Sprintf("otpauth://hotp/%s?secret=%s&algorithm=%s&counter=%d", issuer, secret, hashFunc, counter)
+func (hotp Hotp) GenerateOtpAuthParams() string {
+	return fmt.Sprintf("%s?secret=%s&algorithm=%s&counter=%d",
+		issuer,
+		EncodeSecret([]byte(hotp.secret)),
+		hotp.hashFunc,
+		hotp.counter)
 }
