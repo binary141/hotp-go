@@ -30,7 +30,7 @@ func main() {
 		panic(err)
 	}
 
-	otp := CreateHotp(secret, counter, digits)
+	otp := CreateHotp(secret, counter, digits, "hotpLabel")
 
 	code, err := otp.Calculate()
 	if err != nil {

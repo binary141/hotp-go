@@ -42,6 +42,7 @@ type Hotp struct {
 	digits          int
 	lookAheadWindow int
 	hashFunc        HashFunc
+	label           string
 	hasher          func() hash.Hash
 }
 
@@ -112,15 +113,20 @@ func Validate(secret string, counter uint64, digits int, code int, hasher func()
 ** creates an hotp object with a default hashing algorithm of SHA-1,
 ** and a default look ahead window of 0
  */
-func CreateHotp(secret string, counter uint64, digits int) Hotp {
+func CreateHotp(secret string, counter uint64, digits int, label string) Hotp {
 	return Hotp{
 		secret:          secret,
+		label:           label,
 		counter:         counter,
 		digits:          digits,
 		lookAheadWindow: 0,
 		hashFunc:        SHA1,
 		hasher:          sha1.New,
 	}
+}
+
+func (hotp *Hotp) SetLabel(label string) {
+	hotp.label = label
 }
 
 func (hotp *Hotp) SetLookAheadWindow(size int) error {
@@ -241,9 +247,16 @@ func DecodeSecret(secret string) (string, error) {
 }
 
 func (hotp Hotp) GenerateOtpAuthParams() string {
-	return fmt.Sprintf("%s?secret=%s&algorithm=%s&counter=%d",
-		issuer,
+	params := fmt.Sprintf("%s?secret=%s&algorithm=%s&counter=%d",
+		hotp.label,
 		EncodeSecret([]byte(hotp.secret)),
 		hotp.hashFunc,
-		hotp.counter)
+		hotp.counter,
+	)
+
+	if issuer == "" {
+		return params
+	}
+
+	return fmt.Sprintf("%s:%s&issuer=%s", issuer, params, issuer)
 }
