@@ -4,6 +4,8 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/base32"
 	"encoding/binary"
 	"fmt"
@@ -14,15 +16,22 @@ import (
 
 const (
 	maxLookAheadSize = 10
+	SHA1             = HashFunc("sha1")
+	SHA256           = HashFunc("sha256")
+	SHA512           = HashFunc("sha512")
 )
 
+type HashFunc string
+
 var (
-	defaultHashFunc = sha1.New
-	issuer          = ""
+	issuer = ""
 )
 
 func init() {
 	envIssuer := os.Getenv("ISSUER")
+	if envIssuer == "" {
+		issuer = "hotp"
+	}
 
 	issuer = envIssuer
 }
@@ -32,22 +41,23 @@ type Hotp struct {
 	counter         uint64
 	digits          int
 	lookAheadWindow int
-	hashFunc        func() hash.Hash
+	hashFunc        HashFunc
+	hasher          func() hash.Hash
 }
 
-func dynamicTruncate(secret string, counter uint64, hashFunc func() hash.Hash) (int32, error) {
-	hasher := hmac.New(hashFunc, []byte(secret))
+func dynamicTruncate(secret string, counter uint64, hasher func() hash.Hash) (int32, error) {
+	hmac := hmac.New(hasher, []byte(secret))
 
 	// a uint64 is 8 bytes
 	bigEndCount := make([]byte, 8)
 	binary.BigEndian.PutUint64(bigEndCount, counter)
 
-	_, err := hasher.Write(bigEndCount)
+	_, err := hmac.Write(bigEndCount)
 	if err != nil {
 		return -1, err
 	}
 
-	hash := hasher.Sum(nil)
+	hash := hmac.Sum(nil)
 
 	offsetBits := hash[0 : 19+1]
 
@@ -74,8 +84,8 @@ func formatCode(code int, digits int) string {
 }
 
 // can be used directly without needing to construct an Hotp object
-func CalculateCode(secret string, counter uint64, digits int, hashFunc func() hash.Hash) (string, error) {
-	Sbits, err := dynamicTruncate(secret, counter, hashFunc)
+func CalculateCode(secret string, counter uint64, digits int, hasher func() hash.Hash) (string, error) {
+	Sbits, err := dynamicTruncate(secret, counter, hasher)
 	if err != nil {
 		return "", err
 	}
@@ -86,13 +96,14 @@ func CalculateCode(secret string, counter uint64, digits int, hashFunc func() ha
 }
 
 // can be used directly without needing to construct an Hotp object
-func Validate(secret string, counter uint64, digits int, code int, hashFunc func() hash.Hash) (bool, error) {
-	correctCode, err := CalculateCode(secret, counter, digits, hashFunc)
+func Validate(secret string, counter uint64, digits int, code int, hasher func() hash.Hash) (bool, error) {
+	correctCode, err := CalculateCode(secret, counter, digits, hasher)
 	if err != nil {
 		return false, err
 	}
 
 	formattedCode := formatCode(code, digits)
+	fmt.Printf("%s -> %s -> %d\n", formattedCode, correctCode, counter)
 
 	return correctCode == formattedCode, nil
 }
@@ -107,7 +118,8 @@ func CreateHotp(secret string, counter uint64, digits int) Hotp {
 		counter:         counter,
 		digits:          digits,
 		lookAheadWindow: 0,
-		hashFunc:        defaultHashFunc,
+		hashFunc:        SHA1,
+		hasher:          sha1.New,
 	}
 }
 
@@ -124,8 +136,23 @@ func (hotp Hotp) GetCounter() uint64 {
 	return hotp.counter
 }
 
-func (hotp *Hotp) SetHashFunc(hashFunc func() hash.Hash) {
-	hotp.hashFunc = hashFunc
+func (hotp *Hotp) SetHashFunc(hashFunc HashFunc) error {
+	switch hashFunc {
+	case SHA1:
+		hotp.hashFunc = SHA1
+		hotp.hasher = sha1.New
+		return nil
+	case SHA256:
+		hotp.hashFunc = SHA256
+		hotp.hasher = sha256.New
+		return nil
+	case SHA512:
+		hotp.hashFunc = SHA512
+		hotp.hasher = sha512.New
+		return nil
+	default:
+		return fmt.Errorf("hashing function '%s' not implemtented", hashFunc)
+	}
 }
 
 func (hotp *Hotp) IncrementCounter() {
@@ -143,7 +170,7 @@ func (hotp *Hotp) SetCounter(counter uint64) {
 * Upon success, increments the counter
  */
 func (hotp *Hotp) Validate(code int) (bool, error) {
-	validated, err := Validate(hotp.secret, hotp.counter, hotp.digits, code, hotp.hashFunc)
+	validated, err := Validate(hotp.secret, hotp.counter, hotp.digits, code, hotp.hasher)
 	if err != nil {
 		return false, err
 	}
@@ -161,7 +188,8 @@ func (hotp *Hotp) Validate(code int) (bool, error) {
 		// make i one based to adjust the counter upon success
 		i += 1
 
-		validated, err := Validate(hotp.secret, hotp.counter+i, hotp.digits, code, hotp.hashFunc)
+		newCounter := hotp.counter + i
+		validated, err := Validate(hotp.secret, newCounter, hotp.digits, code, hotp.hasher)
 		if err != nil {
 			return false, err
 		}
@@ -177,11 +205,11 @@ func (hotp *Hotp) Validate(code int) (bool, error) {
 }
 
 func (hotp Hotp) Calculate() (string, error) {
-	return CalculateCode(hotp.secret, hotp.counter, hotp.digits, hotp.hashFunc)
+	return CalculateCode(hotp.secret, hotp.counter, hotp.digits, hotp.hasher)
 }
 
 func (hotp Hotp) GenerateOtpAuth() string {
-	return GenerateOtpAuth(EncodeSecret([]byte(hotp.secret)), hotp.counter)
+	return GenerateOtpAuth(EncodeSecret([]byte(hotp.secret)), hotp.counter, hotp.hashFunc)
 }
 
 // generates a random []byte of length. Note 10-20 is generally secure for hotp
@@ -210,6 +238,6 @@ func DecodeSecret(secret string) (string, error) {
 	return string(decoded), nil
 }
 
-func GenerateOtpAuth(secret string, counter uint64) string {
-	return fmt.Sprintf("otpauth://hotp/%s?secret=%s&counter=%d", issuer, secret, counter)
+func GenerateOtpAuth(secret string, counter uint64, hashFunc HashFunc) string {
+	return fmt.Sprintf("otpauth://hotp/%s?secret=%s&algorithm=%s&counter=%d", issuer, secret, hashFunc, counter)
 }
